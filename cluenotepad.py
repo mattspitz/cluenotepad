@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from collections import deque, namedtuple
+from collections import defaultdict, deque, namedtuple
 import datetime
 import logging
 import os
@@ -46,9 +46,10 @@ Question = namedtuple("Question", "person weapon room")
 Turn = namedtuple("Turn", "question asker answerer")
 
 class Game(object):
-    def __init__(self, players):
+    def __init__(self, players, known_cards):
         super(Game, self).__init__()
         self.players = players
+        self.known_cards = known_cards
         self.turns = deque()
         self.name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S.clue")
 
@@ -59,6 +60,7 @@ class Game(object):
     def print_current_state(self):
         """ Prints the current game state, rebuilt from scratch from all turns. """
         # TODO construct game state
+        print self.known_cards
         print("Players: {0}".format(", ".join(self.players)))
         # TODO print game state
 
@@ -101,15 +103,27 @@ def game_loop(game=None):
         game.dump_state()
 
 def get_player_names():
-    raw_player_names = raw_input("Enter player names, clockwise and space-delimited: ")
+    raw_player_names = raw_input("Enter all player names, clockwise and space-delimited: ")
     return [ name.strip() for name in raw_player_names.split() ]
+
+def get_known_cards(all_players):
+    known = defaultdict(list)
+    while True:
+        raw_known = raw_input("Enter known cards as 'player card1 card2 card3...' (enter to exit): ")
+        if raw_known.strip():
+            player, cards = raw_known.split(" ", 1)
+            known[find_best(player, all_players)].extend([
+                find_best(card, Board.people + Board.weapons + Board.rooms) for card in cards.split() ])
+        else:
+            return known
 
 def main():
     if len(sys.argv) > 1:
         game = pickle.load(open(sys.argv[1]))
     else:
         players = get_player_names()
-        game = Game(players)
+        known_cards = get_known_cards(players)
+        game = Game(players, known_cards)
     game_loop(game)
 
 if __name__ == "__main__":
