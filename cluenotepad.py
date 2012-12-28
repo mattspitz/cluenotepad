@@ -129,7 +129,20 @@ class Game(object):
 
         # TODO resolve maybes
 
-        # TODO resolve conflicts (can't have > 1 person who answered yes or more than one murder item)
+        # sanity check: there can't be two people who've answered yes on the same item
+        for card, card_state in game_state.iteritems():
+            yes_players = filter(lambda (k,v): v == YES, card_state.items())
+            if len(yes_players) > 1:
+                raise IllegalGameStateException("{:d} players have {} marked as yes! ({})".format(len(yes_players), card, ",".join(yes_players)))
+
+        # sanity check: there can't be two items in a group with everyone answering no
+        for group, cards in BOARD.iteritems():
+            allno_cards = filter(
+                    lambda card: all(v == NO for k,v in game_state[card].iteritems()),
+                    cards
+                    )
+            if len(allno_cards) > 1:
+                raise IllegalGameStateException("More than one card in {} has everyone answering NO ({}).  Can't be more than one per group in the center envelope!".format(group, ",".join(allno_cards)))
 
         print("Players: {0}".format(", ".join(self.all_players)))
 
