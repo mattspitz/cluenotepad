@@ -153,7 +153,7 @@ class Game(object):
                 else:
                     no = players_by_val.get(NO, [])
                     if len(no) == len(card_state): # everyone answered NO
-                        out["Yes"] = "{}!".format(descriptor)
+                        out["Yes"] = "**{}**".format(descriptor)
                     else:
                         maybe = players_by_val.get(MAYBE, [])
                         out["No"] = ", ".join(filter(lambda x: x != self.player, no))
