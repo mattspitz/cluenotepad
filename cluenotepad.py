@@ -66,7 +66,7 @@ class Game(object):
         # TODO print game state
 
     def show_turns(self):
-        for i, turn in enumerate(self.turns, 1):
+        for i, turn in enumerate(reversed(self.turns), 1):
             print("{:d}. {}".format(i, turn))
 
     def undo_last_turn(self):
