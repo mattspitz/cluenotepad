@@ -48,10 +48,10 @@ Question = namedtuple("Question", "person weapon room")
 Turn = namedtuple("Turn", "question asker answerer card")
 
 class Game(object):
-    def __init__(self, players, known_cards):
+    def __init__(self, players, initial_known_cards):
         super(Game, self).__init__()
         self.players = players
-        self.known_cards = known_cards
+        self.initial_known_cards = initial_known_cards
         self.turns = deque()
         self.name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S.clue")
 
@@ -72,7 +72,7 @@ class Game(object):
                 for player in self.players:
                     game_state[group][item][player] = MAYBE
 
-        self.known_cards
+        self.initial_known_cards
         print("Players: {0}".format(", ".join(self.players)))
         # TODO print game state
 
@@ -136,7 +136,7 @@ def get_player_names():
     raw_player_names = raw_input("Enter all player names, clockwise and space-delimited: ")
     return [ name.strip() for name in raw_player_names.split() ]
 
-def get_known_cards(all_players):
+def get_initial_known_cards(all_players):
     known = defaultdict(set)
     while True:
         raw_known = raw_input("Enter known cards as 'player card1 card2 card3...' (enter to exit): ")
@@ -152,8 +152,8 @@ def main():
         game = pickle.load(open(sys.argv[1]))
     else:
         players = get_player_names()
-        known_cards = get_known_cards(players)
-        game = Game(players, known_cards)
+        initial_known_cards = get_initial_known_cards(players)
+        game = Game(players, initial_known_cards)
     game_loop(game)
 
 if __name__ == "__main__":
