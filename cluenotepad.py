@@ -118,8 +118,8 @@ class Game(object):
                 for card in turn.question:
                     set_no(card, player)
 
-            # handle the answerer
-            if turn.answerer != "-":
+            # handle the answerer (if answered and it's not the player playing)
+            if turn.answerer not in ["-", self.player]:
                 if turn.card is not None:
                     set_yes(turn.card, turn.answerer)
                 else:
