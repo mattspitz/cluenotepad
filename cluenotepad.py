@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from collections import defaultdict, deque, namedtuple
+from collections import defaultdict, namedtuple
 import datetime
 import itertools
 import logging
@@ -43,48 +43,142 @@ BOARD = {
             "Study"
             ]
     }
+ALL_CARDS = set(itertools.chain(*BOARD.itervalues()))
 
 Question = namedtuple("Question", "person weapon room")
 Turn = namedtuple("Turn", "question asker answerer card")
 
+class IllegalGameStateException(Exception):
+    pass
+
 class Game(object):
-    def __init__(self, players, initial_known_cards):
+    def __init__(self, player, all_players, player_cards):
         super(Game, self).__init__()
-        self.players = players
-        self.initial_known_cards = initial_known_cards
-        self.turns = deque()
+        self.player = player
+        self.all_players = all_players
+        self.player_cards = player_cards
+        self.turns = [] # used as a stack
         self.name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S.clue")
 
     def add_turn(self, turn):
-        _logger.debug("Adding turn: {0}".format(turn))
-        self.turns.appendleft(turn)
+        _logger.debug("Adding turn: {}".format(turn))
+        self.turns.append(turn)
+
+    def players_between(self, asker, answerer):
+        """ Given a start player, returns the players, in order, between asker and answerer, non-inclusive.  If answerer is -, returns all players except the asker, in order. """
+
+        asker_pos = self.all_players.index(asker)
+        answerer_pos = self.all_players.index(answerer) if answerer != "-" else asker_pos
+
+        if answerer_pos > asker_pos:
+            return self.all_players[(asker_pos + 1) : answerer_pos]
+        else:
+            return (self.all_players + self.all_players)[(asker_pos + 1) : (len(self.all_players) + answerer_pos)]
 
     def print_current_state(self):
         """ Prints the current game state, rebuilt from scratch from all turns.
 
-        For each item-player combination, we store one of three states, YES, NO, or MAYBE.  A next iteration could be smart about which questions to ask next to reveal more information, but we're not there yet.
+        For each item-player combination, we store one of four states, YES, NO, MAYBE, or UNK (unknown).  A next iteration could be smart about which questions to ask next to reveal more information, but we're not there yet.
         """
-        YES, NO, MAYBE = range(1, 4)
+        YES, NO, MAYBE, UNK = range(1, 5)
 
-        game_state = defaultdict(lambda: defaultdict(dict))
-        for group, items in BOARD.iteritems():
-            for item in items:
-                for player in self.players:
-                    game_state[group][item][player] = MAYBE
+        game_state = defaultdict(dict) # represents state by card-player combinations
+        for card in ALL_CARDS:
+            for player in self.all_players:
+                game_state[card][player] = UNK
 
-        self.initial_known_cards
-        print("Players: {0}".format(", ".join(self.players)))
-        # TODO print game state
+        # set up the player's cards
+        for card_state in game_state.itervalues():
+            card_state[self.player] = NO
+        for card in self.player_cards:
+            game_state[card][self.player] = YES
+
+        maybes_by_player = defaultdict(list) # represents maybe-state by player (resolved later)
+        for i, turn in enumerate(self.turns):
+            _logger.debug("Handling turn: {}".format(turn))
+
+            def set_no(card, player):
+                if game_state[card][player] == YES:
+                    raise IllegalGameStateException("Error processing turn {:d}.  We know that {} has {} but we're trying to set the state to NO.".format(i, player, card))
+                else:
+                    game_state[card][player] = NO
+
+            def set_yes(card, player):
+                if game_state[card][player] == NO:
+                    raise IllegalGameStateException("Error processing turn {:d}.  We know that {} doesn't have {} but we're trying to set the state to YES.".format(i, player, card))
+                else:
+                    game_state[card][player] = YES
+
+            def set_maybe(card, player):
+                if game_state[card][player] not in (YES, NO):
+                    game_state[card][player] = MAYBE
+
+            # we know that all players in between have none of these cards
+            for player in self.players_between(turn.asker, turn.answerer):
+                for card in turn.question:
+                    set_no(card, player)
+
+            # handle the answerer
+            if turn.answerer != "-":
+                if turn.card is not None:
+                    set_yes(turn.card, turn.answerer)
+                else:
+                    for card in turn.question:
+                        set_maybe(card, turn.answerer)
+                    maybes_by_player[turn.answerer].append(turn.question)
+
+        # TODO resolve maybes
+
+        # TODO resolve conflicts (can't have > 1 person who answered yes or more than one murder item)
+
+        print("Players: {0}".format(", ".join(self.all_players)))
+
+        output_table = []
+        for group, descriptor in [
+                ("people", "Murderer"),
+                ("weapons", "Weapon"),
+                ("rooms", "Scene of the crime")]:
+            output_table.append( ("", "Yes", "No", "Maybe") )
+
+            for card in BOARD[group]:
+                card_state = game_state[card]
+                players_by_val = {
+                        V : [ player for player,val in card_state.iteritems() if val == V ]
+                        for V in set(card_state.values())
+                        }
+                out = defaultdict(str)
+
+                if YES in players_by_val:
+                    out["Yes"] = players_by_val[YES][0]
+                else:
+                    no = players_by_val.get(NO, [])
+                    if len(no) == len(card_state): # everyone answered NO
+                        out["Yes"] = "{}!".format(descriptor)
+                    else:
+                        maybe = players_by_val.get(MAYBE, [])
+                        out["No"] = ", ".join(filter(lambda x: x != self.player, no))
+                        out["Maybe"] = ", ".join(filter(lambda x: x != self.player, maybe))
+                output_table.append( (card, out["Yes"], out["No"], out["Maybe"]) )
+            output_table.append( ("", "", "", "") )
+
+        print_table(output_table)
 
     def show_turns(self):
-        for i, turn in enumerate(reversed(self.turns), 1):
+        for i, turn in enumerate(self.turns, 1):
             print("{:d}. {}".format(i, turn))
 
     def undo_last_turn(self):
-        self.turns.popleft()
+        self.turns.pop()
 
     def dump_state(self):
         pickle.dump(self, open(self.name, "w"))
+
+def print_table(table):
+    FILL_SPACE = 8
+    col_widths = [ max(map(len, [ row[i] for row in table ])) for i in range(len(table[0])) ]
+
+    for row in table:
+        print((" "*FILL_SPACE).join( s.ljust(col_widths[i]) for i,s in enumerate(row) ))
 
 def find_best(s, options):
     """ Given a raw input string and a series of possibilities, returns the option with the lowest Levenshtein distance, representing our best guess. """
@@ -109,9 +203,13 @@ def get_turn(players):
             question = Question(find_best(person, BOARD["people"]),
                     find_best(weapon, BOARD["weapons"]),
                     find_best(room, BOARD["rooms"]))
-            best_card = find_best(card, itertools.chain(*BOARD.itervalues())) if card is not None else None
-            if best_card is not None and best_card not in (question.person, question.weapon, question.room):
-                raise Exception("Card shown ({}) must be one from the question ({})".format(best_card, question))
+            best_card = find_best(card, ALL_CARDS) if card is not None else None
+            if best_card is not None:
+                if answerer == "-":
+                    raise Exception("If card is provided, answerer must not be -.")
+
+                if best_card not in (question.person, question.weapon, question.room):
+                    raise Exception("Card shown ({}) must be one from the question ({})".format(best_card, question))
 
             return Turn(question,
                     find_best(asker, players),
@@ -126,7 +224,7 @@ def game_loop(game=None):
     while True:
         game.print_current_state()
         try:
-            turn = get_turn(game.players)
+            turn = get_turn(game.all_players)
         except EndOfGameException:
             return
         game.add_turn(turn)
@@ -136,24 +234,23 @@ def get_player_names():
     raw_player_names = raw_input("Enter all player names, clockwise and space-delimited: ")
     return [ name.strip() for name in raw_player_names.split() ]
 
-def get_initial_known_cards(all_players):
-    known = defaultdict(set)
-    while True:
-        raw_known = raw_input("Enter known cards as 'player card1 card2 card3...' (enter to exit): ")
-        if raw_known.strip():
-            player, cards = raw_known.split(" ", 1)
-            known[find_best(player, all_players)].update({
-                find_best(card, itertools.chain(*BOARD.itervalues())) for card in cards.split() })
-        else:
-            return known
+def get_this_player(all_players):
+    raw_player_name = raw_input("Enter your name: ")
+    return find_best(raw_player_name, all_players)
+
+def get_player_cards():
+    raw_known = raw_input("Enter your cards, space-delimited: ")
+    return [ find_best(card, ALL_CARDS) for card in raw_known.split() ]
 
 def main():
     if len(sys.argv) > 1:
         game = pickle.load(open(sys.argv[1]))
     else:
-        players = get_player_names()
-        initial_known_cards = get_initial_known_cards(players)
-        game = Game(players, initial_known_cards)
+        all_players = get_player_names()
+        player = get_this_player(all_players)
+        player_cards = get_player_cards()
+        game = Game(player, all_players, player_cards)
+
     game_loop(game)
 
 if __name__ == "__main__":
