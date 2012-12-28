@@ -2,6 +2,7 @@
 
 from collections import defaultdict, deque, namedtuple
 import datetime
+import itertools
 import logging
 import os
 import pickle
@@ -107,13 +108,13 @@ def get_player_names():
     return [ name.strip() for name in raw_player_names.split() ]
 
 def get_known_cards(all_players):
-    known = defaultdict(list)
+    known = defaultdict(set)
     while True:
         raw_known = raw_input("Enter known cards as 'player card1 card2 card3...' (enter to exit): ")
         if raw_known.strip():
             player, cards = raw_known.split(" ", 1)
-            known[find_best(player, all_players)].extend([
-                find_best(card, Board.people + Board.weapons + Board.rooms) for card in cards.split() ])
+            known[find_best(player, all_players)].update({
+                find_best(card, itertools.chain(*BOARD.itervalues())) for card in cards.split() })
         else:
             return known
 
