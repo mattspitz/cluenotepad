@@ -87,31 +87,40 @@ class Game(object):
             for player in self.all_players:
                 game_state[card][player] = UNK
 
+        def set_no(card, player):
+            if game_state[card][player] == YES:
+                raise IllegalGameStateException("We know that {} has {} but we're trying to set the state to NO.".format(player, card))
+            else:
+                _logger.debug("Setting {} to NO for {}".format(card, player))
+                game_state[card][player] = NO
+
+        def set_yes(card, player):
+            if game_state[card][player] == NO:
+                raise IllegalGameStateException("We know that {} doesn't have {} but we're trying to set the state to YES.".format(player, card))
+            else:
+                _logger.debug("Setting {} to YES for {}".format(card, player))
+                game_state[card][player] = YES
+                for other_player in game_state[card]:
+                    if player != other_player:
+                        set_no(card, other_player)
+
+        def set_maybe(card, player):
+            if game_state[card][player] not in (YES, NO):
+                _logger.debug("Setting {} to MAYBE for {}".format(card, player))
+                game_state[card][player] = MAYBE
+            else:
+                _logger.debug("Skipping MAYBE on {} for {}.  Card was already {}.".format(card, player, "YES" if game_state[card][player] == YES else "NO"))
+
         # set up the player's cards
-        for card_state in game_state.itervalues():
-            card_state[self.player] = NO
-        for card in self.player_cards:
-            game_state[card][self.player] = YES
+        for card in ALL_CARDS:
+            if card in self.player_cards:
+                set_yes(card, self.player)
+            else:
+                set_no(card, self.player)
 
         maybes_by_player = defaultdict(list) # represents maybe-state by player (resolved later)
         for i, turn in enumerate(self.turns):
             _logger.debug("Handling turn: {}".format(turn))
-
-            def set_no(card, player):
-                if game_state[card][player] == YES:
-                    raise IllegalGameStateException("Error processing turn {:d}.  We know that {} has {} but we're trying to set the state to NO.".format(i, player, card))
-                else:
-                    game_state[card][player] = NO
-
-            def set_yes(card, player):
-                if game_state[card][player] == NO:
-                    raise IllegalGameStateException("Error processing turn {:d}.  We know that {} doesn't have {} but we're trying to set the state to YES.".format(i, player, card))
-                else:
-                    game_state[card][player] = YES
-
-            def set_maybe(card, player):
-                if game_state[card][player] not in (YES, NO):
-                    game_state[card][player] = MAYBE
 
             # we know that all players in between have none of these cards
             for player in self.players_between(turn.asker, turn.answerer):
