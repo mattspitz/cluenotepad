@@ -136,7 +136,30 @@ class Game(object):
                         set_maybe(card, turn.answerer)
                     maybes_by_player[turn.answerer].append(turn.question)
 
-        # TODO resolve maybes
+        # resolve 'maybe's
+        while True:
+            changes_made = False
+            for player, questions in maybes_by_player.iteritems():
+                for question in questions:
+                    cards_by_response = defaultdict(list)
+                    for card in question:
+                        cards_by_response[game_state[card][player]].append(card)
+
+                    # if player has answered yes to any of these, we've no new information
+                    if cards_by_response.get(YES, []):
+                        continue
+
+                    # but if the player has answered no to all but one, we can confirm that this person has the remaining one
+                    if len(cards_by_response.get(NO, [])) == len(question) - 1:
+                        other_cards = list(itertools.chain(*( cards for resp, cards in cards_by_response.iteritems() if resp != NO  )))
+                        assert len(other_cards) == 1
+                        _logger.debug("{} answered to no to all cards in a question they answered except {}.  Marking YES.".format(player, other_cards[0]))
+                        set_yes(other_cards[0], player)
+                        changes_made = True
+
+            if not changes_made:
+                _logger.debug("No further changes made by resolving maybes.")
+                break
 
         # sanity check: there can't be two people who've answered yes on the same item
         for card, card_state in game_state.iteritems():
