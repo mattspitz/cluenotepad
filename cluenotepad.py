@@ -119,7 +119,7 @@ class Game(object):
                 set_no(card, self.player)
 
         maybes_by_player = defaultdict(list) # represents maybe-state by player (resolved later)
-        for i, turn in enumerate(self.turns):
+        for turn in self.turns:
             _logger.debug("Handling turn: {}".format(turn))
 
             # we know that all players in between have none of these cards
